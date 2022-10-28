@@ -1,0 +1,172 @@
+---
+title: "Diabetes Prediction using kNN in R"
+author: "by Tamunoye Darego"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+### Introduction
+Diabetes is a chronic(long-lasting) health condition that affects how your body converts food into energy, diabetes hampers the body's ability to make sufficient insulin which then leads to there being too much blood sugar in the bloodstream. Excess blood sugar over a prolonged time, can lead to serious health problems such as heart disease, vision loss and kidney disease. There is no cure for diabetes yet, but it can be managed through healthier eating, losing weight and taking medicine as prescribed by a medical practitioner. Hence, this analysis is geared towards training a model that can identify diabetes in patients using the k-nearest neighbors(kNN) Algorithm.
+
+### Aim
+Train a model that can predict diabetes in patients.
+
+### Objectives
+* Highlight and Analyze trends in the dataset used
+* Measure the accuracy of the model
+* Test for further improvements to the accuracy of the model
+
+### About the dataset
+The data used for this analysis is from the National Institute of Diabetes and Digestive and Kidney Diseases and is made available on Kaggle by [Mehmet Akturk](https://www.kaggle.com/mathchi).
+
+The Dataset contains entries from only women of at least 21 years of age with Pima Indian heritage with the following features;
+
+* Pregnancies: Number of times pregnant.
+
+* Glucose: Plasma glucose concentration a 2 hours in an oral glucose tolerance test.
+
+* BloodPressure: Diastolic blood pressure (mm Hg).
+
+* SkinThickness: Triceps skin fold thickness (mm).
+
+* Insulin: 2-Hour serum insulin (mu U/ml).
+
+* BMI: Body mass index (weight in kg/(height in m)^2).
+
+* DiabetesPedigreeFunction: Diabetes pedigree function.
+
+* Age: Age (years).
+
+* Outcome: Class variable (0 or 1) with the class value 1 representing those who tested positive for diabetes.
+
+### Importing and Exploring the dataset
+#### Loading the packages
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(ggplot2)
+library(janitor)
+library(gmodels)
+library(class)
+library(corrplot)
+```
+
+
+#### Loading the dataset
+```{r}
+diabetes_df <- read.csv("diabetes.csv")
+```
+
+#### Exploring the structure of the dataset
+```{r}
+str(diabetes_df)
+```
+The dataset contains data entries from 768 patients, with all the features/attributes being numeric values.
+
+#### Checking for duplicate entries in the dataset
+```{r}
+get_dupes(diabetes_df)
+```
+There are no duplicate entries in the dataset
+
+#### Cleaning and Transforming the dataset
+```{r}
+diabetes_df$Outcome <- as.character(diabetes_df$Outcome)
+diabetes_df <- diabetes_df %>%
+  mutate(Outcome = fct_recode(Outcome, "Diabetic" = "1", "Non Diabetic" = "0"))
+diabetes_df$Outcome <- factor(diabetes_df$Outcome,
+                              levels = c("Diabetic", "Non Diabetic"),
+                              labels = c("Diabetic", "Non Diabetic"))
+```
+Here, the values of the outcome attributes are transformed from 1's and 0's to "Diabetic" and "Non Diabetic" to make the outcomes/diagnosis more clearer to understand.
+
+#### Checking for correlation in the dataset
+```{r}
+diabetes_correlation_df <- diabetes_df[-9]
+diabetes_correlation_df <- cor(diabetes_correlation_df)
+corrplot(diabetes_correlation_df, method = "color", type = "lower", addCoef.col = "black", col = COL2("RdYlBu"), number.cex = 0.8, tl.cex = 0.8)
+```
+
+There are moderate positive correlations between the Age and Pregnancy, and the Insulin and Skin Thickness attributes. This indicates that as the age of the patients increased so did the number of pregnancies, also as the quantity of insulin administered to the patients increased; the skin thickness increased likewise.
+
+Weak positive correlations can also be observed in the following attributes of the dataset; Insulin & Glucose, BMI & Skin Thickness, Blood Pressure & BMI, Age & Blood Pressure e.t.c...
+
+#### Age, BMI and Blood Pressure
+```{r}
+ggplot(data = diabetes_df, aes(x = Age)) + geom_histogram(bins = 30, color = "blue", fill = "lightblue") + facet_wrap(~Outcome) + theme_dark() + ylab("Number of Patients") + labs(title = "Age(s) of Patients")
+```
+
+The ages of the patients are skewed to the right with most of the patients being between the ages of 20 to 40.
+
+<br>
+
+```{r}
+ggplot(data = diabetes_df, aes(x = BMI)) + geom_histogram(bins = 30, color = "blue", fill = "lightblue") + facet_wrap(~Outcome) + theme_dark() + ylab("Number of Patients") + labs(title = "BMI of Patients")
+```
+
+From the histogram above, the BMI attribute is symmetric but it is quite visible that outliers exist in the dataset having BMI's with 0 values. To have a BMI of Zero(0) is impossible, indicating that there might be an error in this field.
+
+<br>
+
+```{r}
+ggplot(data = diabetes_df, aes(x = BloodPressure)) + geom_histogram(bins = 30, color = "blue", fill = "lightblue") + facet_wrap(~Outcome) + theme_dark() + ylab("Number of Patients") + labs(title = "Patient Blood Pressure")
+```
+
+Just as the previous chart indicated; outliers are also present in the blood pressure attribute. With the outlier being 0(Zero) it is clear to see that there must be an error as the human blood pressure can not drop to absolute 0(Zero).
+
+<br>
+
+### Preparing the data
+#### Creating a normalize function
+```{r}
+normalize <- function(x){
+  (x-min(x))/(max(x)-min(x))
+}
+diabetes_df_n <- as.data.frame(lapply(diabetes_df[1:8],normalize))
+```
+k-Nearest Neighbors uses the Euclidean Distance(which is the distance one
+would measure if you could use a ruler to connect two points) to classify, so we normalize the dataset to re-scale the value of the features to ensure each value is contributing equally to the distance formula.
+
+#### Seperating the dataset into the Train and Test Data
+```{r}
+diabetes_df_train <- diabetes_df_n[1:668, ]
+diabetes_df_test <- diabetes_df_n[669:768, ]
+
+diabetes_train_labels <- diabetes_df[1:668, 9]
+diabetes_test_labels <- diabetes_df[669:768, 9]
+```
+Finally, the dataset is then split into two where the larger half will be used to train the model and the second half utilized to test the accuracy of the model.
+
+### Training the Model
+```{r}
+diabetes_prediction <- knn(train = diabetes_df_train, test = diabetes_df_test, cl = diabetes_train_labels, k = 27)
+```
+The kNN factor is utilized above to train the model, the value used for k is the square-root of the total sample size used for the analysis(768).
+
+### Evaluating the Model Performance
+```{r}
+CrossTable(y = diabetes_prediction, x = diabetes_test_labels, prop.chisq = FALSE)
+```
+The CrossTable function is used above to determine the accuracy of the model by comparing the known values to the values predicted by the model. There were 37 diabetic patients and 67 non diabetic patients, the model was able to predict 21 diabetic patients and 59 non diabetic patients leading to an **Accuracy of 80%**.
+
+### Improving Model Performance
+#### Removing Outliers
+```{r}
+diabetes_df <- diabetes_df%>% filter(BMI > 0) %>% filter(BloodPressure > 0)
+diabetes_df_n <- as.data.frame(lapply(diabetes_df[1:8],normalize))
+
+diabetes_df_train <- diabetes_df_n[1:629, ]
+diabetes_df_test <- diabetes_df_n[630:729, ]
+
+diabetes_train_labels <- diabetes_df[1:629, 9]
+diabetes_test_labels <- diabetes_df[630:729, 9]
+
+diabetes_prediction <- knn(train = diabetes_df_train, test = diabetes_df_test, cl = diabetes_train_labels, k = 27)
+
+CrossTable(y = diabetes_prediction, x = diabetes_test_labels, prop.chisq = FALSE)
+```
+The accuracy of the model was not hampered by the presence of the outliers, as the accuracy reduced to 76% with the removal of outliers.
+
+
+Thank you for taking you time to go through my analysis. Any feedback is welcomed.
